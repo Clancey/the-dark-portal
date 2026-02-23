@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title + ' - ' : '' %>The Dark Portal</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">The Dark Portal</a>
+    <ul class="navbar-nav" id="navGuest">
+      <li><a href="/login">Login</a></li>
+      <li><a href="/register">Register</a></li>
+    </ul>
+    <div class="user-info" id="navUser" style="display: none;">
+      <ul class="navbar-nav">
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/profile">Characters</a></li>
+        <li><a href="/npc-search">NPC Search</a></li>
+        <li><a href="/account">Account</a></li>
+      </ul>
+      <span class="user-name" id="userName"></span>
+      <a href="#" id="logoutBtn" class="btn btn-secondary btn-sm">Logout</a>
+    </div>
+  </nav>

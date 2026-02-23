@@ -34,13 +34,50 @@ export async function boot() {
     context: async ({req}) => {
       const decoded = verifyToken(req, conf.secret);
       if (decoded) {
-        const user = await models.User.findOne({
+        // First try to find in local Users table
+        let user = await models.User.findOne({
           where: {
             id: decoded.id,
           },
         });
 
-        if (!user) throw new Error('User does not exists');
+        // If not found in local table, look up from auth database
+        // and create a minimal user object from the token
+        if (!user) {
+          // Try to get account info from realm auth database
+          const realmModels = sRealmMgr.models;
+          let account = null;
+
+          // Find the account in any auth database
+          for (const dbId of Object.keys(realmModels)) {
+            if (realmModels[dbId].account) {
+              try {
+                account = await realmModels[dbId].account.findOne({
+                  where: {id: decoded.id},
+                  attributes: ['id', 'username', 'email'],
+                });
+                if (account) break;
+              } catch (e) {
+                // Continue to next database
+              }
+            }
+          }
+
+          if (account) {
+            // Return user-like object from account data
+            user = {
+              id: account.id,
+              username: account.username,
+              email: account.email,
+            };
+          } else {
+            // Fallback: just use the decoded token info
+            user = {
+              id: decoded.id,
+            };
+          }
+        }
+
         return {
           user,
         };

@@ -18,4 +18,5 @@ export const CustomErrors = {
   tooManyAccounts: 'Too many account',
   noCharSelected: 'No Character Selected',
   alreadyActivated: 'Already Activated',
+  invalidInviteCode: 'Invalid invite code',
 };

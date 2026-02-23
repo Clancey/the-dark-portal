@@ -12,6 +12,7 @@ import {
   isEmailValid,
   normalizeCredentials,
 } from '../Utils';
+import {generateSaltVerifier, verifyPassword} from '../srp6';
 import {app} from '@/service/boot/express';
 import ACL from '@/logic/ACL';
 import {CustomErrors} from '@/logic/CustomErrors';
@@ -29,11 +30,7 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
 
   account.graphql = {
     attributes: {
-      exclude: {
-        // changed
-        create: [],
-        fetch: ['sha_pass_hash'],
-      },
+      exclude: ['salt', 'verifier', 'session_key', 'totp_secret'],
     },
     excludeMutations: ['create', 'destroy', 'update'],
     types: {
@@ -45,6 +42,7 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
         username: 'String!',
         email: 'String!',
         password: 'String!',
+        inviteCode: 'String!',
       },
       login: {
         wpToken: 'String',
@@ -52,6 +50,7 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
         id: 'Int',
         gmlevel: 'Int',
         email: 'String',
+        username: 'String',
       },
       loginInput: {
         username: 'String!',
@@ -115,8 +114,14 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
         description: 'Create a new account',
         input: 'newAccountInput',
         resolver: async (obj, data, context, info) => {
-          // newAccountInput.username, newAccountInput.email, newAccountInput.password
           const signup = data.newAccountInput;
+
+          // Verify invite code
+          const expectedCode = process.env.INVITE_CODE || conf.registrationInviteCode;
+          if (!expectedCode || signup.inviteCode !== expectedCode) {
+            throw Error(CustomErrors.invalidInviteCode);
+          }
+
           // normalize Username and Password
           signup.username = normalizeCredentials(signup.username);
           signup.password = normalizeCredentials(signup.password);
@@ -127,34 +132,37 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
           isEmailValid(signup.email);
 
           // check if it's an email and from listed domains.
-          if (!validateEmail(signup.email, ['gmail.com'])) {
+          // Relaxed email validation - allow any domain
+          if (!signup.email.includes('@')) {
             throw Error(CustomErrors.invalidEmail);
           }
 
-          const username = await models[dbId]['account'].findOne({
+          const existingUsername = await models[dbId]['account'].findOne({
             where: {
               username: signup.username,
             },
           });
-          if (username) throw Error(CustomErrors.invalidUsername);
-          const mail = await models[dbId]['account'].findOne({
+          if (existingUsername) throw Error(CustomErrors.invalidUsername);
+
+          const existingEmail = await models[dbId]['account'].findOne({
             where: {
               email: signup.email,
             },
           });
+          if (existingEmail) throw Error(CustomErrors.invalidEmail);
 
-          if (mail) throw Error(CustomErrors.invalidEmail);
-
-          const pass = await sha1(signup.username + ':' + signup.password);
+          // Generate SRP6 salt and verifier
+          const {salt, verifier} = generateSaltVerifier(signup.username, signup.password);
 
           const acc = await account.create({
             username: signup.username,
-            sha_pass_hash: pass,
+            salt: salt,
+            verifier: verifier,
             email: signup.email,
             reg_mail: signup.email,
             joindate: new Date(),
             last_login: new Date(),
-            locked: 1,
+            locked: 0,
             last_ip: '127.0.0.1',
           });
 
@@ -175,8 +183,9 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
               },
           );
 
-          const email = new Mailer(conf.mailer);
-          email.sendConfirmation(activationToken, acc.email, acc.id);
+          // Skip email confirmation for now
+          // const email = new Mailer(conf.mailer);
+          // email.sendConfirmation(activationToken, acc.email, acc.id);
 
           return {
             id: acc.id,
@@ -204,74 +213,60 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
           login.username = normalizeCredentials(login.username);
           login.password = normalizeCredentials(login.password);
 
-          const res = await models[dbId]['account'].findOne({
-            attributes: ['id', 'email'],
+          // First find the account by username
+          const acc = await models[dbId]['account'].findOne({
+            attributes: ['id', 'email', 'username', 'salt', 'verifier'],
             where: {
               username: login.username,
-              sha_pass_hash: sha1(login.username + ':' + login.password),
             },
-            include: [
-              {
-                attributes: ['gmlevel'],
-                model: models[dbId]['account_access'],
-                where: {
-                  [Sequelize.Op.or]: [
-                    {
-                      RealmId: 1,
-                    },
-                    {
-                      RealmId: -1,
-                    },
-                  ],
-                },
-                required: false,
-              },
-            ],
-            raw: true,
           });
 
-          if (!res) {
+          if (!acc) {
             const isEmail = login.username.match(
                 /^([\w.%+-]+)@([\w-]+\.)+([\w]{2,})$/i,
             );
             if (isEmail) {
               throw Error(CustomErrors.invalidLoginIsEmail);
             } else {
-              const checkUsername = await models[dbId]['account'].findOne({
-                attributes: ['id'],
-                where: {
-                  username: login.username,
-                },
-                include: [
-                  {
-                    attributes: ['gmlevel'],
-                    model: models[dbId]['account_access'],
-                    where: {
-                      [Sequelize.Op.or]: [
-                        {
-                          RealmId: 1,
-                        },
-                        {
-                          RealmId: -1,
-                        },
-                      ],
-                    },
-                    required: false,
-                  },
-                ],
-                raw: true,
-              });
-              if (!checkUsername) {
-                throw Error(CustomErrors.invalidLoginBadUsername);
-              } else {
-                throw Error(CustomErrors.invalidLoginBadPassword);
-              }
+              throw Error(CustomErrors.invalidLoginBadUsername);
             }
+          }
+
+          // Verify password using SRP6
+          const isValid = verifyPassword(
+              login.username,
+              login.password,
+              acc.salt,
+              acc.verifier,
+          );
+
+          if (!isValid) {
+            throw Error(CustomErrors.invalidLoginBadPassword);
+          }
+
+          // Get gmlevel
+          let gmlevel = 0;
+          try {
+            const accessEntry = await models[dbId]['account_access'].findOne({
+              attributes: ['gmlevel'],
+              where: {
+                id: acc.id,
+                [Sequelize.Op.or]: [
+                  {RealmID: 1},
+                  {RealmID: -1},
+                ],
+              },
+            });
+            if (accessEntry) {
+              gmlevel = accessEntry.gmlevel;
+            }
+          } catch (e) {
+            // account_access might not exist or have different structure
           }
 
           const _token = jsonwebtoken.sign(
               {
-                id: res.id,
+                id: acc.id,
               },
               conf.secret,
               {
@@ -280,16 +275,16 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
           );
 
           return {
-            id: res.id,
-            gmlevel: res['account_accesses.gmlevel'] || 0,
+            id: acc.id,
+            gmlevel: gmlevel,
             token: _token,
             wpToken: _wpToken,
-            email: res.email,
+            email: acc.email,
+            username: acc.username,
           };
         },
       },
       recoverPassword: {
-        // RECOVER PASSWORD MUTATION
         output: 'recovery',
         description: 'Recover user password from email',
         input: 'recoveryInput',
@@ -318,10 +313,10 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
             userApp = syncWithGame(appModels, user.id, '', '');
           }
 
-          userApp.recoveryToken = await bcrypt.hash(user.email, saltRounds); // hashes email token for activation
+          userApp.recoveryToken = await bcrypt.hash(user.email, saltRounds);
           userApp.recoveryToken = userApp.recoveryToken
               .replace(/[/.]/g, '')
-              .substring(0, 60); // to prevent slashes in the activation url
+              .substring(0, 60);
           await appModels.User.update(
               {
                 recoveryToken: userApp.recoveryToken,
@@ -342,7 +337,6 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
         },
       },
       changePassword: {
-        // CHANGE PASSWORD MUTATION
         output: 'changePsw',
         description: 'Change Password',
         input: 'changePswInput',
@@ -355,21 +349,38 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
           // normalize
           change.newPass = normalizeCredentials(change.newPass);
           change.oldPass = normalizeCredentials(change.oldPass);
-          user.username = normalizeCredentials(user.username);
+
           isPasswordValid(change.newPass);
 
-          const oldPass = sha1(user.username + ':' + change.oldPass);
-          if (oldPass !== user.sha_pass_hash) {
+          // Get current account data
+          const acc = await account.findOne({
+            where: {id: user.id},
+            attributes: ['username', 'salt', 'verifier'],
+          });
+
+          if (!acc) {
+            throw Error(CustomErrors.userNotFound);
+          }
+
+          // Verify old password
+          const isValid = verifyPassword(
+              acc.username,
+              change.oldPass,
+              acc.salt,
+              acc.verifier,
+          );
+
+          if (!isValid) {
             throw Error(CustomErrors.wrongOldPass);
           }
-          const newPass = sha1(user.username + ':' + change.newPass);
+
+          // Generate new SRP6 credentials
+          const {salt, verifier} = generateSaltVerifier(acc.username, change.newPass);
+
           await account.update(
               {
-                sha_pass_hash: newPass,
-                // we must reset following field because the game server uses an SRP6 protocolo
-                // to handle authentication. So v and s must be regenerated by the server.
-                v: 0,
-                s: 0,
+                salt: salt,
+                verifier: verifier,
               },
               {
                 where: {
@@ -383,7 +394,6 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
         },
       },
       changeEmail: {
-        // CHANGE Email MUTATION
         output: 'changeEmail',
         description: 'Change Email',
         input: 'changeEmailInput',
@@ -394,15 +404,14 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
           const change = data.changeEmailInput;
 
           isEmailValid(change.newEmail);
-          // check if it's an email and from listed domains.
-          if (!validateEmail(change.newEmail, ['gmail.com'])) {
+          if (!change.newEmail.includes('@')) {
             throw Error(CustomErrors.invalidEmail);
           }
 
           await account.update(
               {
                 email: change.newEmail,
-                lock: 1,
+                locked: 1,
               },
               {
                 where: {
@@ -440,7 +449,6 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
         },
       },
       resendConfirmation: {
-        // RESEND EMAIL TO CONFIRM ACCOUNT
         output: 'resendConf',
         description: 'Resend Confirmation',
         input: 'resendConfInput',
@@ -457,7 +465,6 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
             attributes: ['locked'],
           });
           if (!userServer) throw Error(CustomErrors.userNotFound);
-          // if (userServer.locked === 0) throw Error(CustomErrors.alreadyActivated);
 
           const appUser = await appModels.User.findOne({
             where: {
@@ -489,20 +496,7 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
     },
   };
 
-  /* RELATION BETWEEN APP DB AND GAME DB (not working) error -> https://pastebin.com/hWS2LPqQ
-
-        models[dbId]['account'].hasOne(appModels.User, {
-            foreignKey: 'id'
-        })
-
-        appModels.User.belongsTo(models[dbId]['account'], {
-            foreignKey: 'id'
-        })
-
-        */
-
   app.get('/pass_recover/:email/:token', async (req, res) => {
-    // RECOVER PASSWORD NEW PASSWORD GENERATION
     let user;
     let newPass;
     try {
@@ -531,15 +525,14 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
           .substr(0, 9);
 
       newPass = normalizeCredentials(newPass);
-      user.username = normalizeCredentials(user.username);
 
-      const pass = await sha1(user.username + ':' + newPass);
+      // Generate new SRP6 credentials
+      const {salt, verifier} = generateSaltVerifier(user.username, newPass);
 
       await account.update(
           {
-            sha_pass_hash: pass,
-            v: 0,
-            s: 0,
+            salt: salt,
+            verifier: verifier,
           },
           {
             where: {
@@ -611,29 +604,6 @@ function dbAdapter(dbId, dbVal, sequelize, models, appModels) {
  * @param model
  */
 function schemaAdapter(model) {
-  /* const filter = (subtree) => {
-        const newSelectionSet = {
-            kind: Kind.SELECTION_SET,
-            selections: subtree.selections.map(selection => {
-                if (selection.name.value == "sha_pass_hash") {
-                    throw new ForbiddenError('You cannot ask for password!');
-                }
-
-                return selection;
-            })
-        };
-        return newSelectionSet;
-    }
-
-    model._graphschema = transformSchema(model._graphschema, [
-        // Wrap document takes a subtree as an AST node
-        new WrapQuery(
-            ["account"], filter, result => result
-        ),
-        new WrapQuery(
-            ["accounts"], filter, result => result
-        ),
-    ]);*/
 }
 
 export {dbAdapter, schemaAdapter};

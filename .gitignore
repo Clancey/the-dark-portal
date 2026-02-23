@@ -92,3 +92,6 @@ src/logic/adapters/*
 
 src/database/entities/realms/*
 !src/database/entities/realms/default
+
+# Local config with real credentials
+my-the-dark-portal.xml

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile Editor - AzerothCore</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <main class="container">
+    <div class="profile-page">
+      <h1>Character Profile Editor</h1>
+
+      <div id="auth-check" class="card">
+        <p>Checking authentication...</p>
+      </div>
+
+      <div id="profile-content" style="display: none;">
+        <div class="card">
+          <h2>Your Characters</h2>
+          <div id="characters-list" class="characters-grid">
+            <p>Loading characters...</p>
+          </div>
+        </div>
+
+        <div id="selected-character" class="card" style="display: none;">
+          <h2>Selected Character: <span id="char-name"></span></h2>
+
+          <div class="char-details">
+            <div class="char-info">
+              <p><strong>Level:</strong> <span id="char-level"></span></p>
+              <p><strong>Class:</strong> <span id="char-class"></span></p>
+              <p><strong>Race:</strong> <span id="char-race"></span></p>
+              <p><strong>Gold:</strong> <span id="char-gold"></span></p>
+              <p><strong>Playtime:</strong> <span id="char-playtime"></span></p>
+            </div>
+          </div>
+
+          <div class="boost-section">
+            <h3>Level Boost</h3>
+            <p class="info-text">Boost your character to a higher level and receive spec-appropriate starter gear!</p>
+
+            <div class="spec-selection">
+              <label for="spec-select"><strong>Choose Specialization:</strong></label>
+              <select id="spec-select" disabled>
+                <option value="">Select a character first</option>
+              </select>
+              <p class="spec-role" id="spec-role"></p>
+            </div>
+
+            <div class="boost-options">
+              <button class="boost-btn" data-level="60" disabled>
+                <span class="boost-level">Level 60</span>
+                <span class="boost-desc">Classic Endgame</span>
+                <span class="boost-gold">+1,000 Gold</span>
+              </button>
+              <button class="boost-btn" data-level="70" disabled>
+                <span class="boost-level">Level 70</span>
+                <span class="boost-desc">TBC Endgame</span>
+                <span class="boost-gold">+2,500 Gold</span>
+              </button>
+              <button class="boost-btn" data-level="80" disabled>
+                <span class="boost-level">Level 80</span>
+                <span class="boost-desc">WotLK Endgame</span>
+                <span class="boost-gold">+5,000 Gold</span>
+              </button>
+            </div>
+
+            <div id="boost-result" class="boost-result" style="display: none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="not-logged-in" class="card" style="display: none;">
+        <h2>Not Logged In</h2>
+        <p>Please <a href="/login">log in</a> to view and manage your characters.</p>
+      </div>
+    </div>
+  </main>
+
+  <%- include('partials/footer') %>
+
+  <script>
+    const RACE_ICONS = {
+      1: 'human', 2: 'orc', 3: 'dwarf', 4: 'nightelf',
+      5: 'undead', 6: 'tauren', 7: 'gnome', 8: 'troll',
+      10: 'bloodelf', 11: 'draenei'
+    };
+
+    const CLASS_COLORS = {
+      1: '#C79C6E', // Warrior
+      2: '#F58CBA', // Paladin
+      3: '#ABD473', // Hunter
+      4: '#FFF569', // Rogue
+      5: '#FFFFFF', // Priest
+      6: '#C41F3B', // Death Knight
+      7: '#0070DE', // Shaman
+      8: '#69CCF0', // Mage
+      9: '#9482C9', // Warlock
+      11: '#FF7D0A', // Druid
+    };
+
+    let selectedCharacter = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const token = Auth.getToken();
+
+      if (!token) {
+        document.getElementById('auth-check').style.display = 'none';
+        document.getElementById('not-logged-in').style.display = 'block';
+        return;
+      }
+
+      document.getElementById('auth-check').style.display = 'none';
+      document.getElementById('profile-content').style.display = 'block';
+
+      await loadCharacters();
+    });
+
+    async function loadCharacters() {
+      const charList = document.getElementById('characters-list');
+
+      try {
+        const result = await GraphQL.query(`
+          query {
+            default_chars_myCharacters {
+              guid
+              name
+              level
+              race
+              class
+              raceName
+              className
+              gender
+              money
+              totaltime
+              online
+            }
+          }
+        `);
+
+        if (result.errors) {
+          charList.innerHTML = '<p class="error">Error loading characters: ' + result.errors[0].message + '</p>';
+          return;
+        }
+
+        const characters = result.data.default_chars_myCharacters;
+
+        if (!characters || characters.length === 0) {
+          charList.innerHTML = '<p>No characters found. Create a character in-game first!</p>';
+          return;
+        }
+
+        charList.innerHTML = characters.map(char => `
+          <div class="char-card ${char.online ? 'online' : ''}" data-guid="${char.guid}" onclick="selectCharacter(${JSON.stringify(char).replace(/"/g, '&quot;')})">
+            <div class="char-portrait" style="background-color: ${CLASS_COLORS[char.class] || '#666'}">
+              <span class="char-level-badge">${char.level}</span>
+            </div>
+            <div class="char-details-mini">
+              <h3 style="color: ${CLASS_COLORS[char.class] || '#fff'}">${char.name}</h3>
+              <p>${char.raceName} ${char.className}</p>
+              ${char.online ? '<span class="online-badge">Online</span>' : ''}
+            </div>
+          </div>
+        `).join('');
+
+      } catch (error) {
+        charList.innerHTML = '<p class="error">Error loading characters: ' + error.message + '</p>';
+      }
+    }
+
+    const ROLE_DESCRIPTIONS = {
+      'tank': 'Tank - High survivability, takes damage for the group',
+      'healer': 'Healer - Keeps the group alive with healing spells',
+      'melee_dps': 'Melee DPS - Close combat damage dealer',
+      'ranged_physical': 'Ranged Physical DPS - Bow/gun damage dealer',
+      'caster_dps': 'Caster DPS - Magical damage dealer'
+    };
+
+    async function selectCharacter(char) {
+      selectedCharacter = char;
+
+      // Update selected state
+      document.querySelectorAll('.char-card').forEach(card => {
+        card.classList.remove('selected');
+      });
+      document.querySelector(`.char-card[data-guid="${char.guid}"]`).classList.add('selected');
+
+      // Show character details
+      const selectedDiv = document.getElementById('selected-character');
+      selectedDiv.style.display = 'block';
+
+      document.getElementById('char-name').textContent = char.name;
+      document.getElementById('char-name').style.color = CLASS_COLORS[char.class] || '#fff';
+      document.getElementById('char-level').textContent = char.level;
+      document.getElementById('char-class').textContent = char.className;
+      document.getElementById('char-race').textContent = char.raceName;
+      document.getElementById('char-gold').textContent = formatGold(char.money);
+      document.getElementById('char-playtime').textContent = formatPlaytime(char.totaltime);
+
+      // Load specs for this class
+      const specSelect = document.getElementById('spec-select');
+      const specRole = document.getElementById('spec-role');
+      specSelect.disabled = true;
+      specSelect.innerHTML = '<option value="">Loading specs...</option>';
+      specRole.textContent = '';
+
+      try {
+        const specResult = await GraphQL.query(`
+          query($input: default_chars_getClassSpecsInput!) {
+            default_chars_getClassSpecs(getClassSpecsInput: $input) {
+              id
+              name
+              role
+            }
+          }
+        `, { input: { classId: char.class } });
+
+        if (specResult.data && specResult.data.default_chars_getClassSpecs) {
+          const specs = specResult.data.default_chars_getClassSpecs;
+          specSelect.innerHTML = specs.map(spec =>
+            `<option value="${spec.id}" data-role="${spec.role}">${spec.name}</option>`
+          ).join('');
+          specSelect.disabled = false;
+
+          // Show role description for first spec
+          if (specs.length > 0) {
+            specRole.textContent = ROLE_DESCRIPTIONS[specs[0].role] || specs[0].role;
+          }
+        }
+      } catch (e) {
+        specSelect.innerHTML = '<option value="">Error loading specs</option>';
+      }
+
+      // Enable/disable boost buttons based on current level and online status
+      updateBoostButtons(char);
+
+      // Hide any previous result
+      document.getElementById('boost-result').style.display = 'none';
+    }
+
+    function updateBoostButtons(char) {
+      const specSelect = document.getElementById('spec-select');
+      const hasSpec = specSelect.value && !specSelect.disabled;
+
+      document.querySelectorAll('.boost-btn').forEach(btn => {
+        const targetLevel = parseInt(btn.dataset.level);
+        if (char.level >= targetLevel) {
+          btn.disabled = true;
+          btn.classList.add('completed');
+          btn.title = 'Already at or above this level';
+        } else if (char.online) {
+          btn.disabled = true;
+          btn.classList.remove('completed');
+          btn.title = 'Character must be offline';
+        } else if (!hasSpec) {
+          btn.disabled = true;
+          btn.classList.remove('completed');
+          btn.title = 'Select a specialization first';
+        } else {
+          btn.disabled = false;
+          btn.classList.remove('completed');
+          btn.title = '';
+        }
+      });
+    }
+
+    // Handle spec selection change
+    document.getElementById('spec-select').addEventListener('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      const role = selectedOption.dataset.role;
+      document.getElementById('spec-role').textContent = ROLE_DESCRIPTIONS[role] || role || '';
+
+      if (selectedCharacter) {
+        updateBoostButtons(selectedCharacter);
+      }
+    });
+
+    function formatGold(copper) {
+      const gold = Math.floor(copper / 10000);
+      const silver = Math.floor((copper % 10000) / 100);
+      const cop = copper % 100;
+      return `${gold}g ${silver}s ${cop}c`;
+    }
+
+    function formatPlaytime(seconds) {
+      const days = Math.floor(seconds / 86400);
+      const hours = Math.floor((seconds % 86400) / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      if (days > 0) {
+        return `${days}d ${hours}h ${mins}m`;
+      }
+      return `${hours}h ${mins}m`;
+    }
+
+    // Attach click handlers to boost buttons
+    document.querySelectorAll('.boost-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!selectedCharacter || btn.disabled) return;
+
+        const targetLevel = parseInt(btn.dataset.level);
+        const specSelect = document.getElementById('spec-select');
+        const specId = specSelect.value;
+        const specName = specSelect.options[specSelect.selectedIndex]?.text || '';
+        const resultDiv = document.getElementById('boost-result');
+
+        if (!specId) {
+          resultDiv.className = 'boost-result error';
+          resultDiv.textContent = 'Please select a specialization first';
+          resultDiv.style.display = 'block';
+          return;
+        }
+
+        if (!confirm(`Boost ${selectedCharacter.name} to level ${targetLevel} as ${specName}?\n\nYou will receive ${specName}-appropriate gear.`)) {
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Boosting...';
+        resultDiv.style.display = 'none';
+
+        try {
+          const result = await GraphQL.query(`
+            mutation($input: default_chars_levelBoostInput!) {
+              default_chars_levelBoost(levelBoostInput: $input) {
+                success
+                message
+                newLevel
+                characterName
+                specName
+              }
+            }
+          `, {
+            input: {
+              characterGuid: selectedCharacter.guid,
+              targetLevel: targetLevel,
+              specId: specId
+            }
+          });
+
+          if (result.errors) {
+            resultDiv.className = 'boost-result error';
+            resultDiv.textContent = result.errors[0].message;
+            resultDiv.style.display = 'block';
+            return;
+          }
+
+          const boostResult = result.data.default_chars_levelBoost;
+          resultDiv.className = 'boost-result ' + (boostResult.success ? 'success' : 'error');
+          resultDiv.textContent = boostResult.message;
+          resultDiv.style.display = 'block';
+
+          if (boostResult.success) {
+            // Reload characters to update the display
+            await loadCharacters();
+            // Re-select the character with updated info
+            if (selectedCharacter) {
+              const updatedChar = {...selectedCharacter, level: boostResult.newLevel};
+              selectCharacter(updatedChar);
+            }
+          }
+        } catch (error) {
+          resultDiv.className = 'boost-result error';
+          resultDiv.textContent = 'Error: ' + error.message;
+          resultDiv.style.display = 'block';
+        } finally {
+          btn.textContent = '';
+          btn.innerHTML = `
+            <span class="boost-level">Level ${targetLevel}</span>
+            <span class="boost-desc">${targetLevel === 60 ? 'Classic' : targetLevel === 70 ? 'TBC' : 'WotLK'} Endgame</span>
+            <span class="boost-gold">+${targetLevel === 60 ? '1,000' : targetLevel === 70 ? '2,500' : '5,000'} Gold</span>
+          `;
+        }
+      });
+    });
+  </script>
+
+  <style>
+    .profile-page {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .characters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .char-card {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid #444;
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .char-card:hover {
+      border-color: #ffd700;
+      transform: translateY(-2px);
+    }
+
+    .char-card.selected {
+      border-color: #ffd700;
+      background: rgba(255, 215, 0, 0.1);
+    }
+
+    .char-card.online {
+      border-color: #00ff00;
+    }
+
+    .char-portrait {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .char-level-badge {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+    }
+
+    .char-details-mini h3 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1.1rem;
+    }
+
+    .char-details-mini p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+
+    .online-badge {
+      background: #00ff00;
+      color: #000;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+
+    .char-details {
+      margin: 1rem 0;
+    }
+
+    .char-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .char-info p {
+      margin: 0.25rem 0;
+    }
+
+    .boost-section {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #444;
+    }
+
+    .boost-section h3 {
+      margin-bottom: 0.5rem;
+    }
+
+    .spec-selection {
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+    }
+
+    .spec-selection label {
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
+    .spec-selection select {
+      width: 100%;
+      max-width: 300px;
+      padding: 0.75rem;
+      font-size: 1rem;
+      background: #1a1a2e;
+      border: 2px solid #444;
+      border-radius: 4px;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .spec-selection select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .spec-selection select:hover:not(:disabled) {
+      border-color: #ffd700;
+    }
+
+    .spec-role {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    .info-text {
+      color: #aaa;
+      margin-bottom: 1rem;
+    }
+
+    .boost-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+    }
+
+    .boost-btn {
+      background: linear-gradient(180deg, #2a4a2a 0%, #1a3a1a 100%);
+      border: 2px solid #3a5a3a;
+      border-radius: 8px;
+      padding: 1rem;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .boost-btn:hover:not(:disabled) {
+      background: linear-gradient(180deg, #3a6a3a 0%, #2a5a2a 100%);
+      border-color: #ffd700;
+      transform: translateY(-2px);
+    }
+
+    .boost-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .boost-btn.completed {
+      background: linear-gradient(180deg, #4a4a2a 0%, #3a3a1a 100%);
+      border-color: #ffd700;
+    }
+
+    .boost-level {
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: #ffd700;
+    }
+
+    .boost-desc {
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+
+    .boost-gold {
+      font-size: 0.9rem;
+      color: #ffd700;
+    }
+
+    .boost-result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+
+    .boost-result.success {
+      background: rgba(0, 128, 0, 0.2);
+      border: 1px solid #00ff00;
+      color: #00ff00;
+    }
+
+    .boost-result.error {
+      background: rgba(128, 0, 0, 0.2);
+      border: 1px solid #ff0000;
+      color: #ff6666;
+    }
+  </style>
+</body>
+</html>

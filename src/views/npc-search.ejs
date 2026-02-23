@@ -1,0 +1,737 @@
+<%- include('partials/header') %>
+
+<style>
+  .search-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    min-height: 70vh;
+  }
+
+  @media (max-width: 1024px) {
+    .search-container {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .results-panel {
+    overflow-y: auto;
+    max-height: 70vh;
+  }
+
+  .map-panel {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #1a1a2e;
+    min-height: 500px;
+  }
+
+  #worldMap {
+    width: 100%;
+    height: 100%;
+    min-height: 500px;
+    background: #0d1b2a;
+  }
+
+  .npc-card {
+    background: rgba(30, 30, 50, 0.9);
+    border: 1px solid rgba(100, 100, 150, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .npc-card:hover {
+    border-color: #4a9eff;
+    background: rgba(40, 40, 70, 0.9);
+  }
+
+  .npc-card.selected {
+    border-color: #ffd700;
+    background: rgba(50, 50, 80, 0.9);
+  }
+
+  .npc-name {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #ffd700;
+    margin-bottom: 5px;
+  }
+
+  .npc-subname {
+    font-size: 0.9rem;
+    color: #888;
+    font-style: italic;
+    margin-bottom: 5px;
+  }
+
+  .npc-info {
+    display: flex;
+    gap: 15px;
+    font-size: 0.85rem;
+    color: #aaa;
+    flex-wrap: wrap;
+  }
+
+  .npc-info-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .spawn-count {
+    background: rgba(74, 158, 255, 0.2);
+    color: #4a9eff;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+  }
+
+  .rank-boss { color: #ff4444; }
+  .rank-rare { color: #0070dd; }
+  .rank-elite { color: #ffd700; }
+
+  .map-controls {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .map-btn {
+    background: rgba(30, 30, 50, 0.95);
+    border: 1px solid rgba(100, 100, 150, 0.3);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+  }
+
+  .map-btn:hover {
+    background: rgba(50, 50, 80, 0.95);
+    border-color: #4a9eff;
+  }
+
+  .map-btn.active {
+    background: rgba(74, 158, 255, 0.4);
+    border-color: #4a9eff;
+  }
+
+  .loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: #888;
+  }
+
+  .spawn-info {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(20, 20, 40, 0.95);
+    border: 1px solid rgba(100, 100, 150, 0.3);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.8rem;
+    z-index: 1000;
+    max-width: 200px;
+  }
+
+  .spawn-info-title {
+    color: #ffd700;
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+
+  .wowhead-link {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 1000;
+  }
+
+  .wowhead-link a {
+    background: rgba(30, 30, 50, 0.95);
+    border: 1px solid rgba(100, 100, 150, 0.3);
+    color: #4a9eff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.8rem;
+  }
+
+  .wowhead-link a:hover {
+    background: rgba(50, 50, 80, 0.95);
+    border-color: #4a9eff;
+  }
+
+  .leaflet-popup-content-wrapper {
+    background: rgba(20, 20, 40, 0.95);
+    color: #fff;
+    border-radius: 6px;
+  }
+
+  .leaflet-popup-tip {
+    background: rgba(20, 20, 40, 0.95);
+  }
+
+  .spawn-popup .coord {
+    font-family: monospace;
+    color: #4a9eff;
+  }
+
+  .map-fallback {
+    position: absolute;
+    bottom: 40px;
+    left: 10px;
+    background: rgba(255, 200, 50, 0.9);
+    color: #333;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    z-index: 1000;
+    display: none;
+  }
+</style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h1 class="card-title">NPC Search</h1>
+      <p class="card-subtitle">Search for creatures and view their spawn locations on the map</p>
+    </div>
+
+    <div id="searchAlert" class="alert"></div>
+
+    <form id="npcSearchForm" class="search-box">
+      <input type="text" id="npcName" name="npcName" class="form-control"
+             placeholder="Enter NPC name (e.g., Hogger, Defias, Murloc)">
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    <div class="search-container">
+      <div class="results-panel" id="npcResults">
+        <div class="empty-state">
+          <div class="empty-state-icon">🔍</div>
+          <p>Enter an NPC name above to search the database</p>
+        </div>
+      </div>
+
+      <div class="map-panel">
+        <div id="worldMap"></div>
+        <div class="map-controls">
+          <button type="button" class="map-btn active" data-map="0">Eastern Kingdoms</button>
+          <button type="button" class="map-btn" data-map="1">Kalimdor</button>
+          <button type="button" class="map-btn" data-map="530">Outland</button>
+          <button type="button" class="map-btn" data-map="571">Northrend</button>
+        </div>
+        <div id="spawnInfo" class="spawn-info" style="display: none;">
+          <div class="spawn-info-title" id="spawnInfoTitle"></div>
+          <div id="spawnInfoContent"></div>
+        </div>
+        <div id="wowheadLink" class="wowhead-link" style="display: none;">
+          <a href="#" target="_blank" id="wowheadMapLink">View on Wowhead</a>
+        </div>
+        <div id="mapFallback" class="map-fallback">
+          Map tiles loading from external source...
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Map configurations with tile sources
+// Trying multiple tile servers - browser may have better access than server
+const MAP_CONFIGS = {
+  0: {
+    name: 'Eastern Kingdoms',
+    // WoW coordinate bounds
+    bounds: { minX: -12000, maxX: 4000, minY: -6000, maxY: 14000 },
+    wowheadId: 'eastern-kingdoms',
+  },
+  1: {
+    name: 'Kalimdor',
+    bounds: { minX: -12000, maxX: 12000, minY: -8000, maxY: 12000 },
+    wowheadId: 'kalimdor',
+  },
+  530: {
+    name: 'Outland',
+    bounds: { minX: -5000, maxX: 10000, minY: -5000, maxY: 10000 },
+    wowheadId: 'outland',
+  },
+  571: {
+    name: 'Northrend',
+    bounds: { minX: -1000, maxX: 12000, minY: -8000, maxY: 12000 },
+    wowheadId: 'northrend',
+  },
+};
+
+// Zone data for fallback display
+const ZONE_DATA = {
+  0: [
+    { id: 12, name: 'Elwynn Forest', x: -9500, y: -500, color: '#2d5a27' },
+    { id: 40, name: 'Westfall', x: -11000, y: -1500, color: '#8b7355' },
+    { id: 44, name: 'Redridge', x: -9200, y: -2800, color: '#8b4513' },
+    { id: 10, name: 'Duskwood', x: -10800, y: -3200, color: '#2d2d2d' },
+    { id: 33, name: 'STV', x: -14000, y: -700, color: '#228b22' },
+    { id: 1, name: 'Dun Morogh', x: -5500, y: -800, color: '#b0c4de' },
+    { id: 38, name: 'Loch Modan', x: -5200, y: -3000, color: '#4682b4' },
+    { id: 11, name: 'Wetlands', x: -3500, y: -2000, color: '#556b2f' },
+    { id: 45, name: 'Arathi', x: -1800, y: -2500, color: '#9acd32' },
+    { id: 47, name: 'Hinterlands', x: 200, y: -2000, color: '#6b8e23' },
+    { id: 28, name: 'W. Plaguelands', x: 1800, y: -1800, color: '#4a4a4a' },
+    { id: 139, name: 'E. Plaguelands', x: 2800, y: -2500, color: '#3d3d3d' },
+    { id: 85, name: 'Tirisfal', x: 2000, y: 400, color: '#4a5568' },
+    { id: 130, name: 'Silverpine', x: 600, y: 600, color: '#2f4f4f' },
+    { id: 267, name: 'Hillsbrad', x: -400, y: -400, color: '#8fbc8f' },
+    { id: 46, name: 'Burning Steppes', x: -7600, y: -5200, color: '#8b0000' },
+    { id: 51, name: 'Searing Gorge', x: -6700, y: -4000, color: '#ff4500' },
+    { id: 3, name: 'Badlands', x: -6500, y: -5500, color: '#cd853f' },
+    { id: 4, name: 'Blasted Lands', x: -11500, y: -5500, color: '#8b4513' },
+    { id: 1519, name: 'Stormwind', x: -8900, y: 550, color: '#4169e1' },
+    { id: 1537, name: 'Ironforge', x: -4900, y: -300, color: '#daa520' },
+    { id: 1497, name: 'Undercity', x: 1700, y: 250, color: '#800080' },
+  ],
+  1: [
+    { id: 141, name: 'Teldrassil', x: 9800, y: 1200, color: '#228b22' },
+    { id: 148, name: 'Darkshore', x: 6500, y: 600, color: '#2f4f4f' },
+    { id: 331, name: 'Ashenvale', x: 3000, y: -500, color: '#006400' },
+    { id: 16, name: 'Azshara', x: 3500, y: -4500, color: '#4682b4' },
+    { id: 14, name: 'Durotar', x: 500, y: -4500, color: '#cd5c5c' },
+    { id: 17, name: 'Barrens', x: -500, y: -2500, color: '#deb887' },
+    { id: 215, name: 'Mulgore', x: -1500, y: 200, color: '#9acd32' },
+    { id: 357, name: 'Feralas', x: -4000, y: 500, color: '#228b22' },
+    { id: 440, name: 'Tanaris', x: -7000, y: -4500, color: '#f5deb3' },
+    { id: 490, name: 'Un\'Goro', x: -6500, y: -2500, color: '#32cd32' },
+    { id: 1377, name: 'Silithus', x: -7500, y: -1000, color: '#d2691e' },
+    { id: 1657, name: 'Darnassus', x: 9600, y: 1000, color: '#9370db' },
+    { id: 1637, name: 'Orgrimmar', x: 1600, y: -4400, color: '#8b0000' },
+    { id: 1638, name: 'Thunder Bluff', x: -1400, y: 200, color: '#daa520' },
+  ],
+  530: [
+    { id: 3483, name: 'Hellfire', x: -500, y: 2500, color: '#8b0000' },
+    { id: 3521, name: 'Zangarmarsh', x: -1500, y: 5500, color: '#008b8b' },
+    { id: 3518, name: 'Nagrand', x: -2500, y: 500, color: '#90ee90' },
+    { id: 3519, name: 'Terokkar', x: -3000, y: 3000, color: '#6b8e23' },
+    { id: 3522, name: 'Blade\'s Edge', x: 2500, y: 6500, color: '#696969' },
+    { id: 3523, name: 'Netherstorm', x: 4000, y: 3500, color: '#9370db' },
+    { id: 3520, name: 'Shadowmoon', x: -3500, y: -2000, color: '#2f4f4f' },
+  ],
+  571: [
+    { id: 495, name: 'Howling Fjord', x: 600, y: -5000, color: '#4682b4' },
+    { id: 3537, name: 'Borean Tundra', x: 3000, y: 5000, color: '#b0c4de' },
+    { id: 66, name: 'Dragonblight', x: 3500, y: 0, color: '#dcdcdc' },
+    { id: 394, name: 'Grizzly Hills', x: 4500, y: -3500, color: '#8b4513' },
+    { id: 65, name: 'Zul\'Drak', x: 5500, y: -4500, color: '#556b2f' },
+    { id: 67, name: 'Storm Peaks', x: 7000, y: -500, color: '#e0e0e0' },
+    { id: 210, name: 'Icecrown', x: 7000, y: 2000, color: '#add8e6' },
+  ],
+};
+
+const ZONE_NAMES = {};
+Object.entries(ZONE_DATA).forEach(([mapId, zones]) => {
+  zones.forEach(zone => {
+    ZONE_NAMES[zone.id] = zone.name;
+  });
+});
+
+let map;
+let markers = [];
+let zoneMarkers = [];
+let currentMapId = 0;
+let allSpawns = [];
+let tileLayer = null;
+let usingFallback = false;
+
+// Convert WoW world coordinates to Leaflet coordinates (0-1000 range)
+function worldToLeaflet(x, y, config) {
+  const bounds = config.bounds;
+  const normX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * 1000;
+  const normY = ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * 1000;
+  return [normY, normX];
+}
+
+function initMap() {
+  map = L.map('worldMap', {
+    crs: L.CRS.Simple,
+    minZoom: -1,
+    maxZoom: 3,
+    attributionControl: false,
+    zoomControl: true,
+  });
+
+  switchMap(0);
+
+  document.querySelectorAll('.map-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const mapId = parseInt(e.target.dataset.map);
+      switchMap(mapId);
+      document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+    });
+  });
+}
+
+function switchMap(mapId) {
+  currentMapId = mapId;
+  const config = MAP_CONFIGS[mapId];
+
+  // Clear existing layers
+  clearMarkers();
+  zoneMarkers.forEach(m => map.removeLayer(m));
+  zoneMarkers = [];
+  map.eachLayer(layer => map.removeLayer(layer));
+
+  // Set bounds
+  const bounds = L.latLngBounds([[0, 0], [1000, 1000]]);
+  map.fitBounds(bounds);
+  map.setMaxBounds(bounds.pad(0.1));
+
+  // Draw styled background with zones
+  drawStyledMap(mapId, config);
+
+  // Re-add spawn markers
+  updateMarkers();
+}
+
+function drawStyledMap(mapId, config) {
+  const zones = ZONE_DATA[mapId] || [];
+
+  // Background - ocean/void
+  const bgColors = {
+    0: '#0a1929', // Dark blue for EK
+    1: '#0a1929', // Dark blue for Kalimdor
+    530: '#1a0a29', // Purple for Outland
+    571: '#0a1a29', // Ice blue for Northrend
+  };
+
+  L.rectangle([[0, 0], [1000, 1000]], {
+    color: 'transparent',
+    fillColor: bgColors[mapId] || '#0a1929',
+    fillOpacity: 1,
+  }).addTo(map);
+
+  // Draw zones as colored regions
+  zones.forEach(zone => {
+    const pos = worldToLeaflet(zone.x, zone.y, config);
+    const radius = zone.name.includes('City') || zone.name.includes('forge') ||
+                   zone.name.includes('wind') || zone.name.includes('rimmar') ? 30 : 70;
+
+    // Zone circle with glow effect
+    const outerGlow = L.circle(pos, {
+      radius: radius + 15,
+      color: 'transparent',
+      fillColor: zone.color,
+      fillOpacity: 0.15,
+    }).addTo(map);
+
+    const circle = L.circle(pos, {
+      radius: radius,
+      color: zone.color,
+      weight: 2,
+      fillColor: zone.color,
+      fillOpacity: 0.5,
+    }).addTo(map);
+
+    // Zone label
+    const label = L.marker(pos, {
+      icon: L.divIcon({
+        className: 'zone-label',
+        html: `<div style="
+          background: rgba(0,0,0,0.75);
+          color: #fff;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-size: 9px;
+          white-space: nowrap;
+          transform: translate(-50%, -50%);
+          border: 1px solid ${zone.color};
+        ">${zone.name}</div>`,
+        iconSize: null,
+      }),
+    }).addTo(map);
+
+    zoneMarkers.push(outerGlow);
+    zoneMarkers.push(circle);
+    zoneMarkers.push(label);
+  });
+}
+
+function clearMarkers() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+}
+
+function updateMarkers() {
+  clearMarkers();
+
+  const config = MAP_CONFIGS[currentMapId];
+  if (!config) return;
+
+  const filteredSpawns = allSpawns.filter(s => s.map === currentMapId);
+
+  filteredSpawns.forEach(spawn => {
+    const pos = worldToLeaflet(spawn.position_x, spawn.position_y, config);
+
+    // Pulsing marker effect
+    const pulseOuter = L.circleMarker(pos, {
+      radius: 14,
+      fillColor: '#ff3333',
+      color: 'transparent',
+      fillOpacity: 0.3,
+    });
+
+    const marker = L.circleMarker(pos, {
+      radius: 8,
+      fillColor: '#ff3333',
+      color: '#ffffff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.9,
+    });
+
+    const zoneName = ZONE_NAMES[spawn.zoneId] || `Zone ${spawn.zoneId}`;
+    marker.bindPopup(`
+      <div class="spawn-popup">
+        <strong style="color: #ffd700;">${spawn.npcName || 'Spawn Point'}</strong><br>
+        <span style="color: #aaa;">${zoneName}</span><br>
+        <span class="coord">X: ${spawn.position_x.toFixed(1)}</span><br>
+        <span class="coord">Y: ${spawn.position_y.toFixed(1)}</span><br>
+        <span class="coord">Z: ${spawn.position_z.toFixed(1)}</span>
+      </div>
+    `);
+
+    pulseOuter.addTo(map);
+    marker.addTo(map);
+    markers.push(pulseOuter);
+    markers.push(marker);
+  });
+}
+
+function showSpawnsOnMap(npcName, npcEntry, locations) {
+  allSpawns = locations.map(loc => ({
+    ...loc,
+    npcName: npcName,
+  }));
+
+  // Find map with most spawns
+  const mapCounts = {};
+  locations.forEach(loc => {
+    mapCounts[loc.map] = (mapCounts[loc.map] || 0) + 1;
+  });
+
+  let bestMap = 0;
+  let maxCount = 0;
+  for (const [mapId, count] of Object.entries(mapCounts)) {
+    if (count > maxCount && MAP_CONFIGS[parseInt(mapId)]) {
+      maxCount = count;
+      bestMap = parseInt(mapId);
+    }
+  }
+
+  // Switch to best map
+  document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`.map-btn[data-map="${bestMap}"]`);
+  if (btn) btn.classList.add('active');
+  switchMap(bestMap);
+
+  // Zoom to markers
+  if (markers.length > 0) {
+    const markerGroup = markers.filter(m => m instanceof L.CircleMarker);
+    if (markerGroup.length > 0) {
+      const group = L.featureGroup(markerGroup);
+      map.fitBounds(group.getBounds().pad(0.5));
+    }
+  }
+
+  // Show info and wowhead link
+  const info = document.getElementById('spawnInfo');
+  document.getElementById('spawnInfoTitle').textContent = npcName;
+  document.getElementById('spawnInfoContent').innerHTML = `
+    <div>${locations.length} spawn${locations.length !== 1 ? 's' : ''}</div>
+    <div style="font-size: 0.7rem; color: #888; margin-top: 5px;">Click markers for coords</div>
+  `;
+  info.style.display = 'block';
+
+  // Update wowhead link
+  const wowheadDiv = document.getElementById('wowheadLink');
+  const wowheadAnchor = document.getElementById('wowheadMapLink');
+  wowheadAnchor.href = `https://www.wowhead.com/wotlk/npc=${npcEntry}`;
+  wowheadDiv.style.display = 'block';
+}
+
+// Search form
+document.getElementById('npcSearchForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const npcName = document.getElementById('npcName').value.trim();
+
+  if (!npcName) {
+    showAlert('Please enter an NPC name', 'error');
+    return;
+  }
+
+  showAlert('Searching...', 'info');
+  document.getElementById('npcResults').innerHTML = '<div class="loading-spinner">Searching...</div>';
+
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch('/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? {'Authorization': `Bearer ${token}`} : {}),
+      },
+      body: JSON.stringify({
+        query: `
+          query SearchNpcs($input: default_world_searchNpcsInput!) {
+            default_world_searchNpcs(searchNpcsInput: $input) {
+              entry
+              name
+              subname
+              minlevel
+              maxlevel
+              rank
+              type
+              locations {
+                guid
+                map
+                zoneId
+                areaId
+                position_x
+                position_y
+                position_z
+              }
+            }
+          }
+        `,
+        variables: {
+          input: { name: npcName, limit: 50 },
+        },
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.errors) {
+      throw new Error(result.errors[0].message);
+    }
+
+    const npcs = result.data.default_world_searchNpcs;
+    displayResults(npcs);
+    hideAlert();
+  } catch (error) {
+    console.error('Search error:', error);
+    showAlert('Error: ' + error.message, 'error');
+    document.getElementById('npcResults').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⚠️</div>
+        <p>Search failed: ${error.message}</p>
+      </div>
+    `;
+  }
+});
+
+function displayResults(npcs) {
+  const container = document.getElementById('npcResults');
+
+  if (!npcs || npcs.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <p>No NPCs found matching your search</p>
+      </div>
+    `;
+    clearMarkers();
+    allSpawns = [];
+    document.getElementById('spawnInfo').style.display = 'none';
+    document.getElementById('wowheadLink').style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = npcs.map(npc => `
+    <div class="npc-card" data-entry="${npc.entry}" data-name="${npc.name}">
+      <div class="npc-name">${npc.name}</div>
+      ${npc.subname ? `<div class="npc-subname">&lt;${npc.subname}&gt;</div>` : ''}
+      <div class="npc-info">
+        <span class="npc-info-item">
+          Lvl <strong>${npc.minlevel}${npc.maxlevel > npc.minlevel ? '-' + npc.maxlevel : ''}</strong>
+        </span>
+        <span class="npc-info-item ${getRankClass(npc.rank)}">
+          ${getRankName(npc.rank)}
+        </span>
+        <span class="spawn-count">${npc.locations.length} spawn${npc.locations.length !== 1 ? 's' : ''}</span>
+      </div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.npc-card').forEach(card => {
+    card.addEventListener('click', () => {
+      container.querySelectorAll('.npc-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+
+      const entry = parseInt(card.dataset.entry);
+      const npcName = card.dataset.name;
+      const npc = npcs.find(n => n.entry === entry);
+
+      if (npc && npc.locations.length > 0) {
+        showSpawnsOnMap(npcName, entry, npc.locations);
+      }
+    });
+  });
+
+  // Show first NPC by default
+  if (npcs.length > 0 && npcs[0].locations.length > 0) {
+    const firstCard = container.querySelector('.npc-card');
+    if (firstCard) {
+      firstCard.classList.add('selected');
+      showSpawnsOnMap(npcs[0].name, npcs[0].entry, npcs[0].locations);
+    }
+  }
+}
+
+function getRankClass(rank) {
+  if (rank === 3) return 'rank-boss';
+  if (rank === 2 || rank === 4) return 'rank-rare';
+  if (rank === 1) return 'rank-elite';
+  return '';
+}
+
+function getRankName(rank) {
+  switch (rank) {
+    case 0: return 'Normal';
+    case 1: return 'Elite';
+    case 2: return 'Rare Elite';
+    case 3: return 'Boss';
+    case 4: return 'Rare';
+    default: return '';
+  }
+}
+
+function showAlert(message, type) {
+  const alert = document.getElementById('searchAlert');
+  alert.textContent = message;
+  alert.className = `alert alert-${type}`;
+  alert.style.display = 'block';
+}
+
+function hideAlert() {
+  document.getElementById('searchAlert').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+});
+</script>
+
+<%- include('partials/footer') %>

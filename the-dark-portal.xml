@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>the-dark-portal</Name>
+  <Repository>ghcr.io/clancey/the-dark-portal:latest</Repository>
+  <Registry>https://github.com/Clancey/the-dark-portal/pkgs/container/the-dark-portal</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/Clancey/the-dark-portal</Project>
+  <Overview>The Dark Portal - Web management panel for your AzerothCore WoW private server. Provides account creation (with invite code gating), character management, NPC search, level boosting, and more.</Overview>
+  <Category>GameServers: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Clancey/the-dark-portal/master/the-dark-portal.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Clancey/the-dark-portal/master/src/public/images/dark-portal-icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>AzerothCore MySQL/MariaDB database must be accessible from this container.</Requires>
+  <Config Name="Web UI Port" Target="3000" Default="3000" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Database Host" Target="DB_HOST" Default="" Mode="" Description="Hostname or IP of your AzerothCore MySQL/MariaDB server" Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Database Port" Target="DB_PORT" Default="3306" Mode="" Description="MySQL/MariaDB port" Type="Variable" Display="always" Required="true" Mask="false">3306</Config>
+  <Config Name="Database User" Target="DB_USER" Default="acore" Mode="" Description="Database username" Type="Variable" Display="always" Required="true" Mask="false">acore</Config>
+  <Config Name="Database Password" Target="DB_PASS" Default="acore" Mode="" Description="Database password" Type="Variable" Display="always" Required="true" Mask="true">acore</Config>
+  <Config Name="Auth Database Name" Target="DB_AUTH_NAME" Default="acore_auth" Mode="" Description="Name of the auth database" Type="Variable" Display="advanced" Required="false" Mask="false">acore_auth</Config>
+  <Config Name="World Database Name" Target="DB_WORLD_NAME" Default="acore_world" Mode="" Description="Name of the world database" Type="Variable" Display="advanced" Required="false" Mask="false">acore_world</Config>
+  <Config Name="Characters Database Name" Target="DB_CHARS_NAME" Default="acore_characters" Mode="" Description="Name of the characters database" Type="Variable" Display="advanced" Required="false" Mask="false">acore_characters</Config>
+  <Config Name="Invite Code" Target="INVITE_CODE" Default="" Mode="" Description="Shared secret code required to create new accounts. Give this to your friends." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="JWT Secret" Target="JWT_SECRET" Default="" Mode="" Description="Secret key for signing auth tokens. Change this to something random and unique." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Realmlist Host" Target="REALMLIST_HOST" Default="" Mode="" Description="Your server's public hostname for the WoW realmlist (e.g. myserver.com). Shown to logged-in users on the dashboard." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+</Container>

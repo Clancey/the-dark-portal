@@ -27,7 +27,7 @@ function getUserConf(confPath, defConf) {
 
     mConf = object.mergeDeep(defConf, toMerge);
   } catch (ex) {
-    mConf = _confDef;
+    mConf = defConf;
   }
 
   return mConf;

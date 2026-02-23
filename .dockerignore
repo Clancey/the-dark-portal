@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+logs
+*.md
+.vscode
+.playwright-mcp
+register-page.png
+src/conf/conf.js

@@ -13,7 +13,7 @@
     ],
     "npm-intellisense.importES6": true,
     "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": true
+        "source.fixAll.eslint": "explicit"
     },
     "files.eol": "\n"
 }

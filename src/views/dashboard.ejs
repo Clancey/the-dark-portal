@@ -1,0 +1,75 @@
+<%- include('partials/header') %>
+
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h1 class="card-title">Dashboard</h1>
+      <p class="card-subtitle">Welcome to your command center, champion</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Account Status</div>
+        <div class="stat-value" style="font-size: 1.5rem; color: var(--success-color);">Active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">GM Level</div>
+        <div class="stat-value" style="font-size: 1.5rem;">Player</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title" style="font-size: 1.25rem;">Getting Connected</h2>
+      <p class="card-subtitle">Follow these steps to start playing</p>
+    </div>
+
+    <div style="margin-bottom: 1.5rem;">
+      <div style="display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1.25rem;">
+        <div class="step-number">1</div>
+        <div>
+          <div style="font-weight: 600; margin-bottom: 0.25rem;">Download the WoW 3.3.5a Client</div>
+          <p class="text-muted" style="font-size: 0.9rem;">Download a World of Warcraft Wrath of the Lich King (3.3.5a) client. You can get one from <a href="https://www.warmane.com/download" target="_blank" class="link">Warmane's download page</a> or any other source for a 3.3.5a client.</p>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1.25rem;">
+        <div class="step-number">2</div>
+        <div>
+          <div style="font-weight: 600; margin-bottom: 0.25rem;">Update Your Realmlist</div>
+          <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Open the following file in your WoW installation folder:</p>
+          <code class="realmlist-code" style="margin-bottom: 0.5rem; color: var(--text-muted);">Data/enUS/realmlist.wtf</code>
+          <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Replace the contents with:</p>
+          <code id="realmlistCode" class="realmlist-code">Loading...</code>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1rem; align-items: flex-start;">
+        <div class="step-number">3</div>
+        <div>
+          <div style="font-weight: 600; margin-bottom: 0.25rem;">Log In &amp; Play</div>
+          <p class="text-muted" style="font-size: 0.9rem;">Launch WoW and log in with the same username and password you created here. See you in Azeroth!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title" style="font-size: 1.25rem;">Quick Links</h2>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+      <a href="/npc-search" class="stat-card link" style="text-decoration: none; color: inherit;">
+        <div class="stat-value" style="font-size: 1.25rem;">NPC Search</div>
+        <div class="stat-label">Find creatures and spawn locations</div>
+      </a>
+      <a href="/account" class="stat-card link" style="text-decoration: none; color: inherit;">
+        <div class="stat-value" style="font-size: 1.25rem;">Account Settings</div>
+        <div class="stat-label">Change password and email</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

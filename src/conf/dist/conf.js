@@ -19,9 +19,11 @@ const conf = {
     process.env.NODE_ENV == 'production' ?
       'https://127.0.0.1' :
       'http://127.0.0.1:3000',
-  secret: '&$fx#W*!aRlh^LvfYA',
+  secret: process.env.JWT_SECRET || 'change-me-to-a-random-secret',
+  registrationInviteCode: process.env.INVITE_CODE || '',
+  realmlistHost: process.env.REALMLIST_HOST || '',
   // optional, for wordpress integration
-  wp_secret: '9E}szZK#N^d*]*p{$R',
+  wp_secret: process.env.WP_SECRET || 'change-me',
   ssl: {
     enabled: process.env.HTTPS === '1' && process.env.NODE_ENV === 'development',
   },
@@ -43,20 +45,22 @@ const conf = {
   },
   realm_databases: {
     default_auth: {
-      host: 'localhost',
-      name: 'acore_auth',
-      user: 'acore',
-      pass: 'acore',
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      name: process.env.DB_AUTH_NAME || 'acore_auth',
+      user: process.env.DB_USER || 'acore',
+      pass: process.env.DB_PASS || 'acore',
       include: ['account.js', 'account_access.js'],
       exclude: ['version_db_auth.js'],
       entities: 'default/auth',
       adapters: 'default/auth', // can be omitted, default will be used
     },
     default_world: {
-      host: 'localhost',
-      name: 'acore_world',
-      user: 'acore',
-      pass: 'acore',
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      name: process.env.DB_WORLD_NAME || 'acore_world',
+      user: process.env.DB_USER || 'acore',
+      pass: process.env.DB_PASS || 'acore',
       include: [],
       exclude: [
         'version_db_world.js',
@@ -68,10 +72,11 @@ const conf = {
       adapters: 'default/world', // can be omitted, default will be used
     },
     default_chars: {
-      host: 'localhost',
-      name: 'acore_chars',
-      user: 'acore',
-      pass: 'acore',
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      name: process.env.DB_CHARS_NAME || 'acore_characters',
+      user: process.env.DB_USER || 'acore',
+      pass: process.env.DB_PASS || 'acore',
       include: [],
       exclude: [
         'version_db_characters.js',

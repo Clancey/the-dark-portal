@@ -14,30 +14,25 @@ module.exports = function(sequelize, DataTypes) {
       defaultValue: '',
       unique: true,
     },
-    sha_pass_hash: {
-      type: DataTypes.STRING(40),
+    salt: {
+      type: DataTypes.BLOB('tiny'),
       allowNull: false,
-      defaultValue: '',
+      graphql: {exclude: true},
     },
-    sessionkey: {
-      type: DataTypes.STRING(80),
+    verifier: {
+      type: DataTypes.BLOB('tiny'),
       allowNull: false,
-      defaultValue: '',
+      graphql: {exclude: true},
     },
-    v: {
-      type: DataTypes.STRING(64),
-      allowNull: false,
-      defaultValue: '',
+    session_key: {
+      type: DataTypes.BLOB('tiny'),
+      allowNull: true,
+      graphql: {exclude: true},
     },
-    s: {
-      type: DataTypes.STRING(64),
-      allowNull: false,
-      defaultValue: '',
-    },
-    token_key: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      defaultValue: '',
+    totp_secret: {
+      type: DataTypes.BLOB,
+      allowNull: true,
+      graphql: {exclude: true},
     },
     email: {
       type: DataTypes.STRING(255),
@@ -92,6 +87,11 @@ module.exports = function(sequelize, DataTypes) {
       type: DataTypes.INTEGER(3).UNSIGNED,
       allowNull: false,
       defaultValue: '2',
+    },
+    Flags: {
+      type: DataTypes.INTEGER(10).UNSIGNED,
+      allowNull: false,
+      defaultValue: '0',
     },
     mutetime: {
       type: DataTypes.BIGINT,

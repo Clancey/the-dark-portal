@@ -1,0 +1,31 @@
+<%- include('partials/header') %>
+
+<div class="container">
+  <div class="card text-center" style="padding: 4rem 2rem;">
+    <h1 style="font-size: 2.5rem; margin-bottom: 1rem;">The Dark Portal</h1>
+    <p class="text-muted mb-3" style="font-size: 1.1rem;">
+      Your gateway to Azeroth
+    </p>
+    <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2rem;">
+      <a href="/register" class="btn btn-primary">Create Account</a>
+      <a href="/login" class="btn btn-secondary">Sign In</a>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value">Account</div>
+      <div class="stat-label">Create and manage your game account</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">Characters</div>
+      <div class="stat-label">View your in-game characters</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">NPC Search</div>
+      <div class="stat-label">Search creatures and their locations</div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
